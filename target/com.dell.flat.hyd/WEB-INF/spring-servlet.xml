@@ -1,0 +1,91 @@
+<beans:beans xmlns="http://www.springframework.org/schema/mvc"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:beans="http://www.springframework.org/schema/beans"
+	xmlns:context="http://www.springframework.org/schema/context" xmlns:tx="http://www.springframework.org/schema/tx"
+	xsi:schemaLocation="http://www.springframework.org/schema/mvc http://www.springframework.org/schema/mvc/spring-mvc.xsd
+		http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd
+		http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx-4.0.xsd">
+
+	
+	<annotation-driven />
+	<context:component-scan base-package="com.dell.flat.hyd" />
+   
+	
+	<beans:bean 
+		class="org.springframework.web.servlet.view.InternalResourceViewResolver">
+		<beans:property name="prefix" value="/WEB-INF/views/" />
+		<beans:property name="suffix" value=".jsp" />
+	</beans:bean>
+	
+	<beans:bean id="multipartResolver"
+	 class="org.springframework.web.multipart.commons.CommonsMultipartResolver">
+	 </beans:bean>
+	 
+	 
+	 <beans:bean id="dataSource" class="org.springframework.jdbc.datasource.DriverManagerDataSource">
+        <beans:property name="driverClassName">
+            <beans:value>com.mysql.jdbc.Driver</beans:value>
+        </beans:property>
+        <beans:property name="url">
+            <beans:value>jdbc:mysql://localhost:3306/video_sharing_website</beans:value>
+        </beans:property>
+        <beans:property name="username">
+            <beans:value>root</beans:value>
+        </beans:property>
+        <beans:property name="password">
+            <beans:value>12345</beans:value>
+        </beans:property>
+    </beans:bean>
+	 
+	  
+	 
+	 
+	<beans:bean id="sessionFactory"
+      class="org.springframework.orm.hibernate5.LocalSessionFactoryBean">
+        <beans:property name="dataSource"
+          ref="dataSource"/>
+        <beans:property name="mappingResources">  
+        <beans:list>  
+        <beans:value>video.hbm.xml</beans:value>  
+        </beans:list>  
+        </beans:property>  
+        <beans:property name="hibernateProperties">
+            
+            <beans:props>
+                <beans:prop key="hibernate.hbm2ddl.auto">
+                    update
+                </beans:prop>
+                <beans:prop key="hibernate.dialect">
+                    org.hibernate.dialect.MySQL5Dialect
+                </beans:prop>
+                <beans:prop key="hibernate.show_sql">true</beans:prop> 
+                <beans:prop key="hibernate.transaction.factory_class">
+                   org.hibernate.transaction.JDBCTransactionFactory
+                </beans:prop>
+            </beans:props>
+        </beans:property>
+        <beans:property name="annotatedClasses">
+        <beans:list>
+        	<beans:value>com.dell.flat.hyd.model.User</beans:value>
+        	<beans:value>com.dell.flat.hyd.model.Subscription</beans:value>
+        	<beans:value>com.dell.flat.hyd.model.Ratings</beans:value>
+        </beans:list>
+        </beans:property>
+        
+       
+    </beans:bean>
+    
+    <beans:bean id="transactionManager"
+        class="org.springframework.orm.hibernate5.HibernateTransactionManager">
+        <beans:property name="sessionFactory" ref="sessionFactory" />
+    </beans:bean>
+ 
+   <tx:annotation-driven transaction-manager="transactionManager"/>
+     <beans:bean id="d" class="com.dell.flat.hyd.model.VideoDao">  
+    <beans:property name="sessionfactory" ref="sessionFactory"></beans:property>  
+    </beans:bean> 
+    
+    <beans:bean id="builder" class="com.dell.flat.hyd.model.JSONBuilder"></beans:bean> 
+    <beans:bean id="recommendation" class="com.dell.flat.hyd.model.Recommendation"></beans:bean> 
+    <beans:bean id="videoToImageExtractor" class="com.dell.flat.hyd.model.ExtractImageFromVideo"></beans:bean>
+</beans:beans>

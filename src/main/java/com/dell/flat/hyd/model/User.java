@@ -13,6 +13,7 @@ public class User {
  @Id
  private int id;
  
+ @Column(unique = true)
  private String email;
  
  @Column(table = "user_details")

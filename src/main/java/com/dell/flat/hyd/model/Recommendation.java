@@ -19,14 +19,17 @@ public class Recommendation {
 		List<RecommendedItem> recommendations = null;
 		MysqlDataSource datasource = new MysqlDataSource();
 		datasource.setServerName("localhost");
-		datasource.setUser("newuser");
-		datasource.setPassword("password");
+		datasource.setUser("root");
+		datasource.setPassword("12345");
 		datasource.setDatabaseName("video_sharing_website");
+		
+		System.out.println(userId);
 		
 		JDBCDataModel dm = new MySQLJDBCDataModel(datasource,"ratings","userId","videoId","ratings","");
 		ItemSimilarity itemSimilarity = new EuclideanDistanceSimilarity(dm);
 		Recommender itemRecommender = new GenericItemBasedRecommender(dm,itemSimilarity);
 		recommendations = itemRecommender.recommend(userId,noOfRecommendations);
+		System.out.println(recommendations);
 		return recommendations;
 	}
 }

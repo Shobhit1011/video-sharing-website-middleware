@@ -46,12 +46,13 @@ import com.dell.flat.hyd.model.Session;
 import com.dell.flat.hyd.model.Structure;
 import com.dell.flat.hyd.model.Subscription;
 import com.dell.flat.hyd.model.User;
+import com.dell.flat.hyd.model.UserSignup;
 import com.dell.flat.hyd.model.Video;
 import com.dell.flat.hyd.model.VideoDao;
 import com.dell.flat.hyd.model.VideoDetails;
 import com.google.gson.Gson;
 
-@CrossOrigin(origins={"http://localhost:4200","http://192.168.1.78:4200"},allowCredentials = "true")
+@CrossOrigin(origins={"*"},allowCredentials = "true")
 @Controller
 public class RestAPI {
 	
@@ -117,7 +118,7 @@ public class RestAPI {
 				Video video = new Video();
 				video.setName_in_folder(fileName);
 				video.setSize(String.valueOf(file.getSize()));
-				video.setId(d.getVideoCount()+1);
+				video.setId(d.getLastVideoIdFromDb()+1);
 				video.setUser_id(user.getId());
 				video.setDescription(description);
 				d.save(video);
@@ -148,17 +149,25 @@ public class RestAPI {
 	@SuppressWarnings({ "rawtypes", "unchecked" })
 	@RequestMapping(value = "/register", method = RequestMethod.POST, produces = "application/json")
 	@ResponseBody
-	public ResponseEntity register(@RequestParam String email, @RequestParam String FirstName, @RequestParam String LastName,
-			@RequestParam long PhoneNo, @RequestParam String Password) {
+	public ResponseEntity register(@RequestBody UserSignup newUser) {
 		User a = new User();
-		a.setId(d.getUserCount()+1);
-		a.setEmail(email);
-		a.setFirstName(FirstName);
-		a.setLastName(LastName);
-		a.setPhoneNo(PhoneNo);
-		a.setPassword(Password);
-		d.save(a);
-		return new ResponseEntity(a,HttpStatus.ACCEPTED);
+		if(d.get(newUser.getEmail()) == null) {
+			a.setId(d.getLastUserIdFromDb()+1);
+			a.setEmail(newUser.getEmail());
+			a.setFirstName(newUser.getFirstName());
+			a.setLastName(newUser.getLastname());
+			a.setPhoneNo(newUser.getPhone_no());
+			a.setPassword(newUser.getPassword());
+			d.save(a);
+			return new ResponseEntity(a,HttpStatus.ACCEPTED);
+		}
+		else {
+			ApplicationError error = new ApplicationError();
+			error.setCode(409);
+			error.setStatusCode("DUPLICATE_EMAIL");
+			error.setMessage("Duplicate Email");
+			return new ResponseEntity(error, HttpStatus.CONFLICT);
+		}
 	}
 
 	@SuppressWarnings({ "unchecked", "rawtypes" })
@@ -352,7 +361,14 @@ public class RestAPI {
 		try {
 		User user = (User)session.getAttribute("user");
 		List<RecommendedItem> list = reccommendation.recommend(3,user.getId());
-		return new ResponseEntity(list,HttpStatus.OK);
+		List<Video> videoRecommendedList = new ArrayList();
+		
+		for(int i=0;i<list.size();i++) {
+			System.out.println(list.get(i).getItemID());
+			Video video = d.getVideoById((int)list.get(i).getItemID());
+			videoRecommendedList.add(video);
+		}
+		return new ResponseEntity(videoRecommendedList,HttpStatus.OK);
 		}
 		catch(TasteException ex) {
 			return new ResponseEntity(ex.getMessage(),HttpStatus.BAD_REQUEST);

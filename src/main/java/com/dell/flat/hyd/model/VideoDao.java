@@ -52,7 +52,9 @@ public List<Video> getAllVideosByUserId(int userId) {
 
 @Transactional
 public Video getVideoById(int id) {
+	System.out.println(sessionfactory);
 	Video video = (Video) sessionfactory.getCurrentSession().get(Video.class, id);
+	System.out.println(video.getName_in_folder());
 	return video;
 }
 
@@ -159,6 +161,40 @@ public List<Ratings> getRatingsByUser(int userId, int videoId) {
 	@SuppressWarnings("unchecked")
 	List<Ratings> list = newQuery.getResultList();
 	return list;
+}
+
+@Transactional
+public int getLastUserIdFromDb() {
+	Query query = sessionfactory.getCurrentSession().createQuery("from User order by id DESC");
+	query.setMaxResults(1);
+	@SuppressWarnings("unchecked")
+	List<User> list = query.getResultList();
+	Iterator<User> itr = list.iterator();
+	
+	int result = 0;
+	if(itr.hasNext()) {
+		User user = (User) itr.next();
+		System.out.println(user.getId());
+		result = user.getId();
+	}
+	return result;
+}
+
+@Transactional
+public int getLastVideoIdFromDb() {
+	Query query = sessionfactory.getCurrentSession().createQuery("from Video order by id DESC");
+	query.setMaxResults(1);
+	@SuppressWarnings("unchecked")
+	List<Video> list = query.getResultList();
+	Iterator<Video> itr = list.iterator();
+	
+	int result = 0;
+	if(itr.hasNext()) {
+		Video video =(Video) itr.next();
+		System.out.println(video.getId());
+		result = video.getId();
+	}
+	return result;
 }
 }
 

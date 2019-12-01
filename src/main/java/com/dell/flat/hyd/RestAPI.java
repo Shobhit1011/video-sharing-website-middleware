@@ -12,6 +12,8 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.TreeSet;
+
+import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
@@ -35,7 +37,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.multipart.MultipartFile;
 import com.dell.flat.hyd.model.ApplicationError;
-import com.dell.flat.hyd.model.ExtractImageFromVideo;
+import com.dell.flat.hyd.model.GenerateManifestFiles;
 import com.dell.flat.hyd.model.JSONBuilder;
 import com.dell.flat.hyd.model.Login;
 import com.dell.flat.hyd.model.Message;
@@ -52,14 +54,11 @@ import com.dell.flat.hyd.model.VideoDao;
 import com.dell.flat.hyd.model.VideoDetails;
 import com.google.gson.Gson;
 
-@CrossOrigin(origins={"*"},allowCredentials = "true")
 @Controller
+@CrossOrigin(origins = {"*"}, allowCredentials = "true")
 public class RestAPI {
 	
 	File dir;
-	
-	@Autowired(required = true)
-	ExtractImageFromVideo videoToImageExtractor;
 	
 	@Autowired(required = true)
 	VideoDao d;
@@ -70,7 +69,10 @@ public class RestAPI {
 	@Autowired(required = true)
 	JSONBuilder builder;
 	HttpSession session;
-
+	
+	@Autowired(required = true)
+	GenerateManifestFiles generateManifestFiles;
+	
 	private FileInputStream fileInputStream;
 
 	@SuppressWarnings({ "rawtypes", "unchecked" })
@@ -87,24 +89,17 @@ public class RestAPI {
 			return new ResponseEntity(user,HttpStatus.ACCEPTED);
 		}
 	}
-
-	@RequestMapping("/getCar")
-	@ResponseBody
-	public String getCar() {
-		return "Hello_World";
-	}
-
+	
 	@SuppressWarnings({ "unchecked", "rawtypes" })
 	@RequestMapping(value = "/postVideo", method = RequestMethod.POST, produces = "application/json")
 	@ResponseBody
-	public ResponseEntity postCar(@RequestParam("file") MultipartFile file, @RequestParam("name") String name,
+	public ResponseEntity postVideo(@RequestParam("file") MultipartFile file, @RequestParam("name") String videoName,
 			@RequestParam("description") String description, HttpServletResponse res) {
 		try {
-			System.out.println(name);
 			User user = (User) session.getAttribute("user");
 			byte bytes[] = file.getBytes();
 			dir = new File("E:/tmpFiles");
-			String fileName = name;
+			String fileName = file.getOriginalFilename();
 			if (!dir.exists())
 				dir.mkdir();
 			File serverFile = new File(dir.getAbsoluteFile() + File.separator + fileName);
@@ -114,13 +109,17 @@ public class RestAPI {
 				stream.write(bytes);
 				stream.close();
 				System.out.println("Path of the Uploaded File is " + serverFile.getAbsolutePath());
-				videoToImageExtractor.extractImage(fileName);
+				generateManifestFiles.generateManifestFile(fileName);
 				Video video = new Video();
+				String video_name_without_extension = fileName.split("[.]")[0];
+				String manifest_path = "http://localhost:8080/com.dell.flat.hyd/manifest/file/" + video_name_without_extension;
 				video.setName_in_folder(fileName);
+				video.setManifest_path(manifest_path);
 				video.setSize(String.valueOf(file.getSize()));
 				video.setId(d.getLastVideoIdFromDb()+1);
 				video.setUser_id(user.getId());
 				video.setDescription(description);
+				video.setVideoName(videoName);
 				d.save(video);
 				return new ResponseEntity(video,HttpStatus.ACCEPTED);
 			}
@@ -133,16 +132,21 @@ public class RestAPI {
 		} catch (IOException e) {
 			System.out.println(e);
 			ApplicationError error = new ApplicationError();
-			
 			error.setCode(400);
 			error.setMessage("Bad Request");
 			return new ResponseEntity(error,HttpStatus.BAD_REQUEST);
-		} catch (Exception ex) {
+		} catch (NullPointerException ex) {
 			ex.printStackTrace();
 			ApplicationError error = new ApplicationError();
 			error.setCode(400);
 			error.setMessage("First Login Please to continue Uploading");
 			return new ResponseEntity(error,HttpStatus.BAD_REQUEST);
+		} catch(Exception ee) {
+			ee.printStackTrace();
+			ApplicationError error = new ApplicationError();
+			error.setCode(500);
+			error.setMessage("Internal Server Error");
+			return new ResponseEntity(error,HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -331,10 +335,10 @@ public class RestAPI {
 		return new ResponseEntity(list,HttpStatus.ACCEPTED);
 	}
 	
-	@RequestMapping(value="/videoStreaming")
+	@RequestMapping(value="/manifest/file/dest/{filename:.+}")
 	@ResponseBody
-	public void getVideo(HttpServletRequest req,HttpServletResponse response,@RequestParam String filename) throws Exception{
-		dir = new File("E:/tmpFiles");
+	public void getVideo(HttpServletRequest req,HttpServletResponse response,@PathVariable String filename) throws Exception{
+		dir = new File("E:/dest");
         String value = dir+File.separator+filename;
         Path path = Paths.get(value);
         System.out.println(path);
@@ -466,6 +470,39 @@ public class RestAPI {
 			ex.printStackTrace();
 			return new ResponseEntity<byte[]>(array, HttpStatus.INTERNAL_SERVER_ERROR) ;
 		}
+	}
+	
+	@RequestMapping(value = "/manifest/file/{videoName}", method = RequestMethod.HEAD)
+	@ResponseBody
+	public void headManifest(HttpServletResponse response, @PathVariable String videoName) throws IOException {
+	        
+			File file = new File("E:/manifests/"+ videoName + "/" + videoName +"-full.mpd");
+			byte[] bytesArray = new byte[(int) file.length()];
+			fileInputStream = new FileInputStream(file);
+			
+	        fileInputStream.read(bytesArray);
+	        response.setContentType("application/dash+xml");
+	        response.addHeader("Content-Disposition", "attachment; filename="
+	                + "dil_diyan-full.mpd");
+	        ServletOutputStream stream = response.getOutputStream();
+	        stream.write(bytesArray);
+	}
+	
+	@RequestMapping(value = "/manifest/file/{videoName}", method = RequestMethod.GET)
+	@ResponseBody
+	public void getManifest(HttpServletResponse response, @PathVariable String videoName) throws IOException {
+	        
+			System.out.println("E:/manifests/"+ videoName + "/" + videoName +"-full.mpd");
+		    File file = new File("E:/manifests/"+ videoName + "/" + videoName +"-full.mpd");
+			byte[] bytesArray = new byte[(int) file.length()];
+			fileInputStream = new FileInputStream(file);
+			
+	        fileInputStream.read(bytesArray);
+	        response.setContentType("application/dash+xml");
+	        response.addHeader("Content-Disposition", "attachment; filename="
+	                + "dil_diyan-full.mpd");
+	        ServletOutputStream stream = response.getOutputStream();
+	        stream.write(bytesArray);
 	}
 	
 	@RequestMapping(value = "/users/{userId}", produces="application/json")

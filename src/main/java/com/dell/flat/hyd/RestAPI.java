@@ -474,9 +474,9 @@ public class RestAPI {
 	
 	@RequestMapping(value = "/manifest/file/{videoName}", method = RequestMethod.HEAD)
 	@ResponseBody
-	public void headManifest(HttpServletResponse response, @PathVariable String videoName) throws IOException {
+	public void headManifest(HttpServletResponse response, @PathVariable String videoName, @RequestParam String quality) throws IOException {
 	        
-			File file = new File("E:/manifests/"+ videoName + "/" + videoName +"-full.mpd");
+			File file = new File("E:/manifests/"+ videoName + "/" + videoName + "-" + quality + ".mpd");
 			byte[] bytesArray = new byte[(int) file.length()];
 			fileInputStream = new FileInputStream(file);
 			
@@ -490,10 +490,9 @@ public class RestAPI {
 	
 	@RequestMapping(value = "/manifest/file/{videoName}", method = RequestMethod.GET)
 	@ResponseBody
-	public void getManifest(HttpServletResponse response, @PathVariable String videoName) throws IOException {
+	public void getManifest(HttpServletResponse response, @PathVariable String videoName, @RequestParam String quality) throws IOException {
 	        
-			System.out.println("E:/manifests/"+ videoName + "/" + videoName +"-full.mpd");
-		    File file = new File("E:/manifests/"+ videoName + "/" + videoName +"-full.mpd");
+		    File file = new File("E:/manifests/"+ videoName + "/" + videoName + "-" + quality + ".mpd");
 			byte[] bytesArray = new byte[(int) file.length()];
 			fileInputStream = new FileInputStream(file);
 			

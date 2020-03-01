@@ -1,0 +1,50 @@
+package com.dell.flat.hyd;
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.handler.annotation.DestinationVariable;
+import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.CrossOrigin;
+
+import com.dell.flat.hyd.model.Comments;
+import com.dell.flat.hyd.model.JSONBuilder;
+import com.dell.flat.hyd.model.User;
+import com.dell.flat.hyd.model.VideoDao;
+
+@Controller
+@CrossOrigin(origins = {"*"}, allowCredentials = "true")
+public class WebSocketController {
+	private SimpMessagingTemplate template;
+	
+	@Autowired(required = true)
+	VideoDao d;
+	
+	@Autowired(required = true)
+	JSONBuilder builder;
+	
+	@Autowired
+	WebSocketController(SimpMessagingTemplate template){
+		this.template = template;
+	}
+	
+	@MessageMapping("/send/message/{videoId}/{userId}")
+	public void send(@Payload String message, @DestinationVariable int videoId, @DestinationVariable int userId, SimpMessageHeaderAccessor headerAccessor) throws Exception {
+			User user = (User)d.getUserById(userId);
+			Date date = new Date();
+			SimpleDateFormat formatter = new SimpleDateFormat("dd-M-yyyy hh:mm:ss");  
+			String strDate = formatter.format(date);
+			Comments comment = new Comments();
+			comment.setUserName(user.getFirstName() + " " + user.getLastName());
+			comment.setVideoId(videoId);
+			comment.setTime(strDate);
+			comment.setComment(message);
+			d.save(comment);
+			this.template.convertAndSend("/chat", builder.objectToJSON(comment));
+	}
+}

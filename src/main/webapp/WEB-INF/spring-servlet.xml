@@ -65,6 +65,7 @@
         	<beans:value>com.dell.flat.hyd.model.Subscription</beans:value>
         	<beans:value>com.dell.flat.hyd.model.Ratings</beans:value>
         	<beans:value>com.dell.flat.hyd.model.Video</beans:value>
+        	<beans:value>com.dell.flat.hyd.model.Comments</beans:value>
         </beans:list>
         </beans:property>
         

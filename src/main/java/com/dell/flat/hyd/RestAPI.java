@@ -12,6 +12,8 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.TreeSet;
+
+import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
@@ -19,10 +21,14 @@ import javax.servlet.http.HttpSession;
 import org.apache.mahout.cf.taste.common.TasteException;
 import org.apache.mahout.cf.taste.recommender.RecommendedItem;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -35,31 +41,32 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.multipart.MultipartFile;
 import com.dell.flat.hyd.model.ApplicationError;
-import com.dell.flat.hyd.model.ExtractImageFromVideo;
+import com.dell.flat.hyd.model.Comments;
+import com.dell.flat.hyd.model.GenerateManifestFiles;
 import com.dell.flat.hyd.model.JSONBuilder;
 import com.dell.flat.hyd.model.Login;
 import com.dell.flat.hyd.model.Message;
 import com.dell.flat.hyd.model.MultipartFileSender;
 import com.dell.flat.hyd.model.Ratings;
 import com.dell.flat.hyd.model.Recommendation;
+import com.dell.flat.hyd.model.SendNotifications;
 import com.dell.flat.hyd.model.Session;
 import com.dell.flat.hyd.model.Structure;
 import com.dell.flat.hyd.model.Subscription;
 import com.dell.flat.hyd.model.User;
+import com.dell.flat.hyd.model.UserNotification;
 import com.dell.flat.hyd.model.UserSignup;
 import com.dell.flat.hyd.model.Video;
 import com.dell.flat.hyd.model.VideoDao;
 import com.dell.flat.hyd.model.VideoDetails;
+import com.dell.flat.hyd.service.VideoProcessingService;
 import com.google.gson.Gson;
 
-@CrossOrigin(origins={"*"},allowCredentials = "true")
 @Controller
+@EnableAsync
+@CrossOrigin(origins = {"*"}, allowCredentials = "true")
 public class RestAPI {
-	
 	File dir;
-	
-	@Autowired(required = true)
-	ExtractImageFromVideo videoToImageExtractor;
 	
 	@Autowired(required = true)
 	VideoDao d;
@@ -68,9 +75,29 @@ public class RestAPI {
 	Recommendation reccommendation;
 	
 	@Autowired(required = true)
+	SendNotifications notifications;
+	
+	@Autowired(required = true)
 	JSONBuilder builder;
 	HttpSession session;
+	
+	@Autowired(required = true)
+	VideoProcessingService videoProcessing;
+	
+	@Autowired(required = true)
+	GenerateManifestFiles generateManifestFiles;
+	
 
+    @Bean("threadPoolTaskExecutor")
+    public TaskExecutor getAsyncExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(20);
+        executor.setMaxPoolSize(1000);
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setThreadNamePrefix("Async-");
+        return executor;
+    }
+	
 	private FileInputStream fileInputStream;
 
 	@SuppressWarnings({ "rawtypes", "unchecked" })
@@ -87,41 +114,38 @@ public class RestAPI {
 			return new ResponseEntity(user,HttpStatus.ACCEPTED);
 		}
 	}
-
-	@RequestMapping("/getCar")
-	@ResponseBody
-	public String getCar() {
-		return "Hello_World";
-	}
-
+	
 	@SuppressWarnings({ "unchecked", "rawtypes" })
 	@RequestMapping(value = "/postVideo", method = RequestMethod.POST, produces = "application/json")
 	@ResponseBody
-	public ResponseEntity postCar(@RequestParam("file") MultipartFile file, @RequestParam("name") String name,
+	public ResponseEntity postVideo(@RequestParam("file") MultipartFile file, @RequestParam("name") String videoName,
 			@RequestParam("description") String description, HttpServletResponse res) {
 		try {
-			System.out.println(name);
 			User user = (User) session.getAttribute("user");
 			byte bytes[] = file.getBytes();
 			dir = new File("E:/tmpFiles");
-			String fileName = name;
 			if (!dir.exists())
 				dir.mkdir();
-			File serverFile = new File(dir.getAbsoluteFile() + File.separator + fileName);
+			File serverFile = new File(dir.getAbsoluteFile() + File.separator + videoName);
 			System.out.println();
 			if(!serverFile.exists()) {
 				BufferedOutputStream stream = new BufferedOutputStream(new FileOutputStream(serverFile));
 				stream.write(bytes);
 				stream.close();
 				System.out.println("Path of the Uploaded File is " + serverFile.getAbsolutePath());
-				videoToImageExtractor.extractImage(fileName);
 				Video video = new Video();
-				video.setName_in_folder(fileName);
+				String video_name_without_extension = videoName.split("[.]")[0];
+				String manifest_path = "http://localhost:8080/com.dell.flat.hyd/manifest/file/" + video_name_without_extension;
+				video.setName_in_folder(videoName);
+				video.setManifest_path(manifest_path);
 				video.setSize(String.valueOf(file.getSize()));
 				video.setId(d.getLastVideoIdFromDb()+1);
 				video.setUser_id(user.getId());
 				video.setDescription(description);
+				video.setVideoName(videoName);
+				video.setStatus("Processing");
 				d.save(video);
+				videoProcessing.videoProcessing(generateManifestFiles, video, d);
 				return new ResponseEntity(video,HttpStatus.ACCEPTED);
 			}
 			else {
@@ -133,16 +157,21 @@ public class RestAPI {
 		} catch (IOException e) {
 			System.out.println(e);
 			ApplicationError error = new ApplicationError();
-			
 			error.setCode(400);
 			error.setMessage("Bad Request");
 			return new ResponseEntity(error,HttpStatus.BAD_REQUEST);
-		} catch (Exception ex) {
+		} catch (NullPointerException ex) {
 			ex.printStackTrace();
 			ApplicationError error = new ApplicationError();
 			error.setCode(400);
 			error.setMessage("First Login Please to continue Uploading");
 			return new ResponseEntity(error,HttpStatus.BAD_REQUEST);
+		} catch(Exception ee) {
+			ee.printStackTrace();
+			ApplicationError error = new ApplicationError();
+			error.setCode(500);
+			error.setMessage("Internal Server Error");
+			return new ResponseEntity(error,HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -155,7 +184,7 @@ public class RestAPI {
 			a.setId(d.getLastUserIdFromDb()+1);
 			a.setEmail(newUser.getEmail());
 			a.setFirstName(newUser.getFirstName());
-			a.setLastName(newUser.getLastname());
+			a.setLastName(newUser.getLastName());
 			a.setPhoneNo(newUser.getPhone_no());
 			a.setPassword(newUser.getPassword());
 			d.save(a);
@@ -176,7 +205,6 @@ public class RestAPI {
 	public ResponseEntity login(HttpServletRequest req, @RequestBody String json) {
 		Gson gson = builder.getGsonObject();
 		Login credentials = gson.fromJson(json, Login.class);
-		
 		ApplicationError error = new ApplicationError();
 		
 		if(credentials.getEmail() == null || credentials.getEmail().trim().equals("")) {
@@ -221,15 +249,10 @@ public class RestAPI {
 		session = req.getSession(false);
 		if (session != null) {
 			session.invalidate();
-			Message message = new Message();
-			message.setMessage("Logout Successfully");
-			return new ResponseEntity(message,HttpStatus.ACCEPTED);
-		} else {
-			ApplicationError error = new ApplicationError();
-			error.setMessage("Please Login to Logout");
-			error.setCode(400);
-			return new ResponseEntity(error,HttpStatus.BAD_REQUEST);
 		}
+		Message message = new Message();
+		message.setMessage("Logout Successfully");
+		return new ResponseEntity(message,HttpStatus.ACCEPTED);
 	}
 
 	@SuppressWarnings({ "unchecked", "rawtypes" })
@@ -262,13 +285,21 @@ public class RestAPI {
 			return new ResponseEntity(error,HttpStatus.BAD_REQUEST);
 		} else {
 			try {
-				Video video = d.getVideoById(video_id);
-				Subscription subscription = new Subscription();
 				User user = (User) session.getAttribute("user");
-				subscription.setSerial_no(d.count() + 1);
-				subscription.setUser_id(user.getId());
-				subscription.setSubscription_id(video.getUser_id());
-				d.save(subscription);
+				Video video = d.getVideoById(video_id);
+				List<Subscription> list = d.checkSubscription(user.getId(), video.getUser_id());
+				Subscription subscription;
+				
+				if(list.size() == 0) {
+					subscription = new Subscription();
+					subscription.setSerial_no(d.count() + 1);
+					subscription.setUser_id(user.getId());
+					subscription.setSubscription_id(video.getUser_id());
+					d.save(subscription);
+				}
+				else {
+					subscription = list.get(0);
+				}
 				return new ResponseEntity(subscription,HttpStatus.ACCEPTED);
 			} catch (NullPointerException ex) {
 				session.invalidate();
@@ -283,7 +314,7 @@ public class RestAPI {
 	@SuppressWarnings({ "unchecked", "rawtypes" })
 	@RequestMapping(value = "/getSubscriptions", produces = "application/json")
 	@ResponseBody
-	public ResponseEntity subcriptions(@RequestParam int userId, HttpServletRequest req, HttpServletResponse res) {
+	public ResponseEntity subcriptions(@RequestParam int user_id, HttpServletRequest req, HttpServletResponse res) {
 		session = req.getSession(false);
 		if (session == null) {
 			ApplicationError error = new ApplicationError();
@@ -300,7 +331,13 @@ public class RestAPI {
 			error.setMessage("First Login Please before getting subscriptions");
 			return new ResponseEntity(error,HttpStatus.BAD_REQUEST);
 		}
-		List<Subscription> list = d.subscriptionsByUserId(userId);
+		if(user_querying.getId() != user_id) {
+			ApplicationError error = new ApplicationError();
+			error.setCode(400);
+			error.setMessage("Cannot Query other users subscriptions");
+			return new ResponseEntity(error,HttpStatus.BAD_REQUEST);
+		}
+		List<Subscription> list = d.subscriptionsByUserId(user_id);
 		Iterator<Subscription> itr = list.iterator();
 		TreeSet<String> tr = new TreeSet<String>();
 		while (itr.hasNext()) {
@@ -308,7 +345,7 @@ public class RestAPI {
 			User user = d.getUserById(subscription.getSubscription_id());
 			tr.add(user.getFirstName() + " " + user.getLastName());
 		}
-		return new ResponseEntity(tr,HttpStatus.BAD_REQUEST);
+		return new ResponseEntity(tr,HttpStatus.ACCEPTED);
 	}
 
 	@SuppressWarnings({ "rawtypes", "unchecked" })
@@ -331,10 +368,10 @@ public class RestAPI {
 		return new ResponseEntity(list,HttpStatus.ACCEPTED);
 	}
 	
-	@RequestMapping(value="/videoStreaming")
+	@RequestMapping(value="/manifest/file/dest/{filename:.+}")
 	@ResponseBody
-	public void getVideo(HttpServletRequest req,HttpServletResponse response,@RequestParam String filename) throws Exception{
-		dir = new File("E:/tmpFiles");
+	public void getVideo(HttpServletRequest req,HttpServletResponse response,@PathVariable String filename) throws Exception{
+		dir = new File("E:/dest");
         String value = dir+File.separator+filename;
         Path path = Paths.get(value);
         System.out.println(path);
@@ -425,8 +462,16 @@ public class RestAPI {
 	
 	@RequestMapping(value="getAllVideos",produces="application/json")
 	@ResponseBody
-	public String getAllVideos() {
-		List<Video> videosList = d.getAllVideos();
+	public String getAllVideos(@RequestParam(value = "skip", required=false) Integer skip,
+			@RequestParam(value = "limit", required=false) Integer limit) {
+		if(skip == null) {
+			skip = 0;
+		}
+		if(limit == null) {
+			limit = 10;
+		}
+		List<Video> videosList = d.getAllVideos(skip, limit);
+		System.out.println(videosList.size());
 		return builder.objectToJSON(videosList);
 	}
 	
@@ -468,6 +513,38 @@ public class RestAPI {
 		}
 	}
 	
+	@RequestMapping(value = "/manifest/file/{videoName}", method = RequestMethod.HEAD)
+	@ResponseBody
+	public void headManifest(HttpServletResponse response, @PathVariable String videoName, @RequestParam String quality) throws IOException {
+	        
+			File file = new File("E:/manifests/"+ videoName + "/" + videoName + "-" + quality + ".mpd");
+			byte[] bytesArray = new byte[(int) file.length()];
+			fileInputStream = new FileInputStream(file);
+			
+	        fileInputStream.read(bytesArray);
+	        response.setContentType("application/dash+xml");
+	        response.addHeader("Content-Disposition", "attachment; filename="
+	                + "dil_diyan-full.mpd");
+	        ServletOutputStream stream = response.getOutputStream();
+	        stream.write(bytesArray);
+	}
+	
+	@RequestMapping(value = "/manifest/file/{videoName}", method = RequestMethod.GET)
+	@ResponseBody
+	public void getManifest(HttpServletResponse response, @PathVariable String videoName, @RequestParam String quality) throws IOException {
+	        
+		    File file = new File("E:/manifests/"+ videoName + "/" + videoName + "-" + quality + ".mpd");
+			byte[] bytesArray = new byte[(int) file.length()];
+			fileInputStream = new FileInputStream(file);
+			
+	        fileInputStream.read(bytesArray);
+	        response.setContentType("application/dash+xml");
+	        response.addHeader("Content-Disposition", "attachment; filename="
+	                + "dil_diyan-full.mpd");
+	        ServletOutputStream stream = response.getOutputStream();
+	        stream.write(bytesArray);
+	}
+	
 	@RequestMapping(value = "/users/{userId}", produces="application/json")
 	@ResponseBody()
 	public ResponseEntity<String> getUser(@PathVariable int userId){
@@ -503,6 +580,77 @@ public class RestAPI {
 			error.setCode(400);
 			error.setMessage("User not logged in");
 			return new ResponseEntity(error,HttpStatus.BAD_REQUEST);
+		}
+	}
+	
+	@RequestMapping(value="/videos/count", method = RequestMethod.GET)
+	@ResponseBody
+	public int getVideosCount() {
+		return d.getVideoCount();
+	}
+	
+	@RequestMapping(value="/comments/{videoId}", method = RequestMethod.GET, produces="application/json")
+	@ResponseBody
+	public String getComments(@PathVariable int videoId) {
+		List<Comments> comments = d.getCommentsByVideoId(videoId);
+		return builder.objectToJSON(comments);
+	}
+	
+	@RequestMapping(value="/user/session", method = RequestMethod.GET, produces="application/json")
+	@ResponseBody
+	public String getUser() {
+		User user = (User) session.getAttribute("user");
+		return builder.objectToJSON(user);
+	}
+	
+	@SuppressWarnings({ "unchecked", "rawtypes" })
+	@RequestMapping(value="/get/notifications", method = RequestMethod.GET, produces="application/json")
+	@ResponseBody
+	public ResponseEntity getNotifications() {
+		if (session == null) {
+			ApplicationError error = new ApplicationError();
+			error.setCode(400);
+			error.setMessage("First Login Please before getting subscriptions");
+			return new ResponseEntity(error,HttpStatus.BAD_REQUEST);
+		}
+
+		User user_querying = (User) session.getAttribute("user");
+		if (user_querying == null) {
+			session.invalidate();
+			ApplicationError error = new ApplicationError();
+			error.setCode(400);
+			error.setMessage("First Login Please before getting subscriptions");
+			return new ResponseEntity(error,HttpStatus.BAD_REQUEST);
+		}
+		else {
+			User userFromSession = (User) session.getAttribute("user");
+			int userId = userFromSession.getId();
+			List<Subscription> list = d.subscriptionsByUserId(userId);
+			Iterator<Subscription> itr = list.iterator();
+			TreeSet<String> tr = new TreeSet<String>();
+			while (itr.hasNext()) {
+				Subscription subscription = itr.next();
+				User user = d.getUserById(subscription.getSubscription_id());
+				tr.add(user.getFirstName() + " " + user.getLastName());
+			}
+			List<UserNotification> notifications = d.getUserNotifications(1, 10, tr);
+			return new ResponseEntity(builder.objectToJSON(notifications), HttpStatus.OK);
+		}
+	}
+	
+	@SuppressWarnings({ "rawtypes", "unchecked" })
+	@RequestMapping(value="/notification/status/{id}", method = RequestMethod.PATCH, produces="application/json")
+	public ResponseEntity updateNotificationStatus(@PathVariable int id, @RequestParam String status) {
+		UserNotification notification = d.getNotificationById(id);
+		if(notification == null) {
+			ApplicationError error = new ApplicationError();
+			error.setCode(404);
+			error.setMessage("Notification Not Found");
+			return new ResponseEntity(builder.objectToJSON(error), HttpStatus.NOT_FOUND);
+		} else {
+			notification.setStatus(status);
+			d.update(notification);
+			return new ResponseEntity(builder.objectToJSON(notification), HttpStatus.OK);
 		}
 	}
 }

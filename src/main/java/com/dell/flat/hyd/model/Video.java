@@ -1,13 +1,55 @@
 package com.dell.flat.hyd.model;
 
+import javax.persistence.Column;
+import javax.persistence.Entity;
+import javax.persistence.Id;
+import javax.persistence.Table;
+
+@Entity
+@Table(name = "video")
 public class Video {
-	//final String status = "SUCCESS";
+	@Id
 	private int id;
+	
+	@Column
 	private String name_in_folder;
+	
+	@Column
 	private String size;
+	
+	@Column
 	private int user_id;
+	
+	@Column
 	private String description;
 	
+	@Column
+	private String manifest_path;
+	
+	@Column
+	private String videoName;
+	
+	@Column
+	private String status;
+	
+	public String getStatus() {
+		return status;
+	}
+	public void setStatus(String status) {
+		this.status = status;
+	}
+	public String getVideoName() {
+		return videoName;
+	}
+	public void setVideoName(String videoName) {
+		this.videoName = videoName;
+	}
+	public String getManifest_path() {
+		return manifest_path;
+	}
+	public void setManifest_path(String manifest_path) {
+		this.manifest_path = manifest_path;
+	}
 	public String getDescription() {
 		return description;
 	}

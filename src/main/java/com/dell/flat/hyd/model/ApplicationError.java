@@ -1,10 +1,9 @@
 package com.dell.flat.hyd.model;
 
-public class ApplicationError extends Error {
+public class ApplicationError {
 	/**
 	 * 
 	 */
-	private static final long serialVersionUID = 1L;
 	private int code;
 	private String message;
 	private String statusCode;

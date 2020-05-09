@@ -19,10 +19,10 @@ public class UserSignup {
 	public void setFirstName(String firstName) {
 		this.firstName = firstName;
 	}
-	public String getLastname() {
+	public String getLastName() {
 		return lastName;
 	}
-	public void setLastname(String lastName) {
+	public void setLastName(String lastName) {
 		this.lastName = lastName;
 	}
 	public String getEmail() {

@@ -43,12 +43,7 @@
 	<beans:bean id="sessionFactory"
       class="org.springframework.orm.hibernate5.LocalSessionFactoryBean">
         <beans:property name="dataSource"
-          ref="dataSource"/>
-        <beans:property name="mappingResources">  
-        <beans:list>  
-        <beans:value>video.hbm.xml</beans:value>  
-        </beans:list>  
-        </beans:property>  
+          ref="dataSource"/>  
         <beans:property name="hibernateProperties">
             
             <beans:props>
@@ -69,6 +64,7 @@
         	<beans:value>com.dell.flat.hyd.model.User</beans:value>
         	<beans:value>com.dell.flat.hyd.model.Subscription</beans:value>
         	<beans:value>com.dell.flat.hyd.model.Ratings</beans:value>
+        	<beans:value>com.dell.flat.hyd.model.Video</beans:value>
         </beans:list>
         </beans:property>
         
@@ -87,5 +83,5 @@
     
     <beans:bean id="builder" class="com.dell.flat.hyd.model.JSONBuilder"></beans:bean> 
     <beans:bean id="recommendation" class="com.dell.flat.hyd.model.Recommendation"></beans:bean> 
-    <beans:bean id="videoToImageExtractor" class="com.dell.flat.hyd.model.ExtractImageFromVideo"></beans:bean>
+    <beans:bean id="generateManifestFiles" class="com.dell.flat.hyd.model.GenerateManifestFiles"></beans:bean>
 </beans:beans>

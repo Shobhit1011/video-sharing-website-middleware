@@ -49,10 +49,12 @@ import com.dell.flat.hyd.model.Message;
 import com.dell.flat.hyd.model.MultipartFileSender;
 import com.dell.flat.hyd.model.Ratings;
 import com.dell.flat.hyd.model.Recommendation;
+import com.dell.flat.hyd.model.SendNotifications;
 import com.dell.flat.hyd.model.Session;
 import com.dell.flat.hyd.model.Structure;
 import com.dell.flat.hyd.model.Subscription;
 import com.dell.flat.hyd.model.User;
+import com.dell.flat.hyd.model.UserNotification;
 import com.dell.flat.hyd.model.UserSignup;
 import com.dell.flat.hyd.model.Video;
 import com.dell.flat.hyd.model.VideoDao;
@@ -71,6 +73,9 @@ public class RestAPI {
 	
 	@Autowired(required = true)
 	Recommendation reccommendation;
+	
+	@Autowired(required = true)
+	SendNotifications notifications;
 	
 	@Autowired(required = true)
 	JSONBuilder builder;
@@ -596,5 +601,56 @@ public class RestAPI {
 	public String getUser() {
 		User user = (User) session.getAttribute("user");
 		return builder.objectToJSON(user);
+	}
+	
+	@SuppressWarnings({ "unchecked", "rawtypes" })
+	@RequestMapping(value="/get/notifications", method = RequestMethod.GET, produces="application/json")
+	@ResponseBody
+	public ResponseEntity getNotifications() {
+		if (session == null) {
+			ApplicationError error = new ApplicationError();
+			error.setCode(400);
+			error.setMessage("First Login Please before getting subscriptions");
+			return new ResponseEntity(error,HttpStatus.BAD_REQUEST);
+		}
+
+		User user_querying = (User) session.getAttribute("user");
+		if (user_querying == null) {
+			session.invalidate();
+			ApplicationError error = new ApplicationError();
+			error.setCode(400);
+			error.setMessage("First Login Please before getting subscriptions");
+			return new ResponseEntity(error,HttpStatus.BAD_REQUEST);
+		}
+		else {
+			User userFromSession = (User) session.getAttribute("user");
+			int userId = userFromSession.getId();
+			List<Subscription> list = d.subscriptionsByUserId(userId);
+			Iterator<Subscription> itr = list.iterator();
+			TreeSet<String> tr = new TreeSet<String>();
+			while (itr.hasNext()) {
+				Subscription subscription = itr.next();
+				User user = d.getUserById(subscription.getSubscription_id());
+				tr.add(user.getFirstName() + " " + user.getLastName());
+			}
+			List<UserNotification> notifications = d.getUserNotifications(1, 10, tr);
+			return new ResponseEntity(builder.objectToJSON(notifications), HttpStatus.OK);
+		}
+	}
+	
+	@SuppressWarnings({ "rawtypes", "unchecked" })
+	@RequestMapping(value="/notification/status/{id}", method = RequestMethod.PATCH, produces="application/json")
+	public ResponseEntity updateNotificationStatus(@PathVariable int id, @RequestParam String status) {
+		UserNotification notification = d.getNotificationById(id);
+		if(notification == null) {
+			ApplicationError error = new ApplicationError();
+			error.setCode(404);
+			error.setMessage("Notification Not Found");
+			return new ResponseEntity(builder.objectToJSON(error), HttpStatus.NOT_FOUND);
+		} else {
+			notification.setStatus(status);
+			d.update(notification);
+			return new ResponseEntity(builder.objectToJSON(notification), HttpStatus.OK);
+		}
 	}
 }

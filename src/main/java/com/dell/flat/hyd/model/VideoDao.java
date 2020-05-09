@@ -1,6 +1,7 @@
 package com.dell.flat.hyd.model;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
 import javax.persistence.Query;
 import javax.persistence.criteria.CriteriaBuilder;
@@ -137,9 +138,20 @@ public Ratings getRatingsById(int id) {
 }
 
 @Transactional
+public UserNotification getNotificationById(int id) {
+	UserNotification notification = (UserNotification)sessionfactory.getCurrentSession().get(UserNotification.class, id);
+	return notification;
+}
+
+@Transactional
 public void updateRatingsById(Ratings rating) {
 	sessionfactory.getCurrentSession().update(rating);
  }
+
+@Transactional
+public void update(Object object) {
+	sessionfactory.getCurrentSession().update(object);
+}
 
 @Transactional
 public void updateVideoById(Video video) {
@@ -230,6 +242,33 @@ public List<Comments> getCommentsByVideoId(int videoId){
 	@SuppressWarnings("unchecked")
 	List<Comments> list = newQuery.getResultList();
 	return list;
+}
+
+@Transactional
+public int getLastNotificationId() {
+	Query query = sessionfactory.getCurrentSession().createQuery("from UserNotification order by id DESC");
+	query.setMaxResults(1);
+	@SuppressWarnings("unchecked")
+	List<UserNotification> list = query.getResultList();
+	Iterator<UserNotification> itr = list.iterator();
+	
+	int result = 0;
+	if(itr.hasNext()) {
+		UserNotification userNotification = (UserNotification) itr.next();
+		System.out.println(userNotification.getId());
+		result = userNotification.getId();
+	}
+	return result;
+}
+
+@SuppressWarnings({ "unchecked"})
+@Transactional
+public List<UserNotification> getUserNotifications(int skip, int limit, Set<String> subscriptions){
+	String jqpl = "from UserNotification where channel in (:subscriptions)";
+	Query query = sessionfactory.getCurrentSession().createQuery(jqpl);
+	query.setParameter("subscriptions", subscriptions);
+	List<UserNotification> notifications = query.getResultList();
+	return notifications;
 }
 }
 
